@@ -4,3 +4,4 @@ sse-starlette
 httpx
 python-multipart
 pytest
+pytest
