@@ -1,0 +1,4 @@
+[
+  {"id": "dummy-model", "object": "model"},
+  {"id": "dummy-embedding-model", "object": "model"}
+]

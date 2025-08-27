@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
+from pathlib import Path
 import asyncio
 import json
 import time
@@ -30,6 +31,10 @@ def _calc_usage(prompt_text: str, completion_text: str) -> dict:
 
 app = FastAPI(title="DummyAI")
 
+# Load model data once at startup for faster responses
+_MODELS = json.loads((Path(__file__).resolve().parent.parent / "models.json").read_text())
+_MODEL_LOOKUP = {m["id"]: m for m in _MODELS}
+
 
 def _now() -> int:
     return int(time.time())
@@ -41,10 +46,11 @@ async def chat_completions(request: Request):
     model = body.get("model", "dummy-model")
     completion_text = "Hello this is a dummy response."
     prompt_text = " ".join(m.get("content", "") for m in body.get("messages", []))
+    tokens = completion_text.split()
     usage = _calc_usage(prompt_text, completion_text)
     if body.get("stream"):
         async def event_generator():
-            for token in completion_text.split():
+            for token in tokens:
                 chunk = {
                     "id": "chatcmpl-dummy",
                     "object": "chat.completion.chunk",
@@ -96,13 +102,17 @@ async def chat_completions(request: Request):
 
 
 @app.get("/v1/models")
+@app.get("/v1/models/")
 async def list_models():
-    return JSONResponse({"object": "list", "data": [{"id": "dummy-model", "object": "model"}]})
+    return JSONResponse({"object": "list", "data": _MODELS})
 
 
 @app.get("/v1/models/{model_id}")
 async def retrieve_model(model_id: str):
-    return JSONResponse({"id": model_id, "object": "model", "owned_by": "dummy"})
+    model = _MODEL_LOOKUP.get(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return JSONResponse(model)
 
 
 @app.post("/v1/completions")
